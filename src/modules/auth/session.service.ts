@@ -5,8 +5,7 @@ import { randomBytes, createHash } from 'crypto';
 import { User } from '@modules/user/entities/user.entity';
 import { UserSession } from './entities/user-session.entity';
 
-const REFRESH_TOKEN_EXPIRY_DAYS = 7;
-
+const REFRESH_TOKEN_EXPIRY_DAYS = Number(process.env.REFRESH_TOKEN_EXPIRY ?? 7);
 @Injectable()
 export class SessionService {
   constructor(
