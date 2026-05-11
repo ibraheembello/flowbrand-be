@@ -1,15 +1,17 @@
 #!/bin/bash
+# Fail loud if any step fails — silent failures here previously caused the
+# migration:run step to be skipped, leaving the DB schemaless.
+set -euo pipefail
 
 BRANCH=$1
 
 # install dependencies
-npm install --include=dev;
+npm install --include=dev
 
-# run build
-npm run build;
+# Run migrations against the already-compiled dist/ (the tarball ships
+# only dist/, so `nest build` would fail here — skip the premigration:run
+# hook by calling typeorm directly).
+npx typeorm migration:run -d dist/src/database/data-source
 
-# run migration
-npm run migration:run;
-
-# run start
-pm2 restart $BRANCH-ecosystem-config.json ||  pm2 start $BRANCH-ecosystem-config.json;
+# Start or restart the app
+pm2 restart "$BRANCH-ecosystem-config.json" || pm2 start "$BRANCH-ecosystem-config.json"
