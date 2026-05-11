@@ -75,13 +75,17 @@ apt-get install -y redis-server
 systemctl enable --now redis-server
 
 # ── Enable password SSH auth (required by the CI pipeline's sshpass) ──────────
+# Ubuntu 24.04 uses socket-activated SSH (ssh.socket → ssh.service), so
+# `systemctl reload ssh` fails — use `restart` which works for both classic
+# and socket-activated setups. The trailing `|| true` keeps us going if the
+# host has neither name; the config files are still in place either way.
 sed -ri 's/^#?\s*PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 mkdir -p /etc/ssh/sshd_config.d
 cat >/etc/ssh/sshd_config.d/99-password-auth.conf <<'EOF'
 PasswordAuthentication yes
 PubkeyAuthentication yes
 EOF
-systemctl reload ssh || systemctl reload sshd
+systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
 
 # ── Deploy directory + runtime layout ─────────────────────────────────────────
 install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${DEPLOY_DIR}"
