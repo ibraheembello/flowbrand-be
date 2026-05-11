@@ -75,17 +75,37 @@ apt-get install -y redis-server
 systemctl enable --now redis-server
 
 # ── Enable password SSH auth (required by the CI pipeline's sshpass) ──────────
+# sshd_config uses the FIRST value of any directive. Files in
+# /etc/ssh/sshd_config.d/ are loaded in alphabetical order via the Include
+# line near the top of the main config. The AWS Ubuntu AMI ships
+# /etc/ssh/sshd_config.d/60-cloudimg-settings.conf with
+# `PasswordAuthentication no` — so a 99-*.conf override loses to it, and
+# patching the main sshd_config also loses because Include is processed
+# first. The reliable fix is to patch the cloudimg file in place.
+#
 # Ubuntu 24.04 uses socket-activated SSH (ssh.socket → ssh.service), so
-# `systemctl reload ssh` fails — use `restart` which works for both classic
-# and socket-activated setups. The trailing `|| true` keeps us going if the
-# host has neither name; the config files are still in place either way.
-sed -ri 's/^#?\s*PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+# `systemctl reload ssh` fails; use `restart`.
 mkdir -p /etc/ssh/sshd_config.d
-cat >/etc/ssh/sshd_config.d/99-password-auth.conf <<'EOF'
+
+if [[ -f /etc/ssh/sshd_config.d/60-cloudimg-settings.conf ]]; then
+  sed -ri 's/^#?\s*PasswordAuthentication\s+.*/PasswordAuthentication yes/' \
+    /etc/ssh/sshd_config.d/60-cloudimg-settings.conf
+fi
+
+sed -ri 's/^#?\s*PasswordAuthentication\s+.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+cat >/etc/ssh/sshd_config.d/00-flowbrand-password-auth.conf <<'EOF'
 PasswordAuthentication yes
 PubkeyAuthentication yes
 EOF
+
 systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+
+if ! sshd -T 2>/dev/null | grep -q '^passwordauthentication yes$'; then
+  echo "WARNING: PasswordAuthentication is still 'no' after our changes." >&2
+  echo "         The CI pipeline's sshpass auth will fail." >&2
+  echo "         Run: sudo sshd -T | grep -i passwordauthentication" >&2
+fi
 
 # ── Deploy directory + runtime layout ─────────────────────────────────────────
 install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" "${DEPLOY_DIR}"
